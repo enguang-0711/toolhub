@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { applyEdits, edgeEdit } from '../src/editing.js';
+import { encodeWav, writeWavToDirectory } from '../src/export.js';
+import { History } from '../src/history.js';
+
+const original={sampleRate:10,channels:[Float32Array.from([1,2,3,4,5,6,7,8,9,10])],length:10,duration:1};
+const add={type:'insert-silence',start:.2,duration:.2};
+const remove={type:'delete',start:.6,end:.8};
+const first=applyEdits(original,[add]);assert.equal(first.length,12);
+const both=applyEdits(original,[add,remove]);assert.deepEqual([...both.channels[0]],[1,2,0,0,3,4,5,6,9,10]);
+const h=new History({operations:[],labels:[]});h.push({operations:[add],labels:['insert']});h.push({operations:[add,remove],labels:['insert','delete']});assert.equal(applyEdits(original,h.undo().operations).length,12);assert.equal(applyEdits(original,h.redo().operations).length,10);
+const two=applyEdits({sampleRate:10,channels:[Float32Array.from([1,2,3,4,5])],length:5,duration:.5},[{type:'insert-silence',start:.2,duration:.1},{type:'insert-audio',start:.2,clip:{sampleRate:10,channels:[Float32Array.of(9)]}}]);
+assert.deepEqual([...two.channels[0]],[1,2,0,9,3,4,5]);
+assert.throws(()=>applyEdits(original,[{type:'delete',start:.1,end:.4},{type:'insert-silence',start:.2,duration:.1}]),/重叠/);
+const a={sampleRate:1000,channels:[Float32Array.of(1,2,3)]};
+assert.throws(()=>edgeEdit({...a,channels:[Float32Array.of(1)],duration:.001},{prependSeconds:-1}),RangeError);
+assert.throws(()=>edgeEdit({...a,channels:[Float32Array.of(1)],duration:.001},{appendSeconds:Infinity}),RangeError);
+const clip={sampleRate:1000,channels:[Float32Array.of(.5)]};
+const out=applyEdits({sampleRate:1000,channels:[Float32Array.of(1,2)],duration:.002},[{type:'replace',start:0,end:.001,clip}]);assert.equal(out.channels[0][0],.5);
+const blob=encodeWav(out);assert.equal(blob.type,'audio/wav');
+await assert.rejects(()=>writeWavToDirectory({getFileHandle:async()=>({createWritable:async()=>({write:async()=>{throw Error('disk')},abort:async()=>{},close:async()=>{}})})},'ok.wav',blob),/disk/);
+await assert.rejects(()=>writeWavToDirectory({getFileHandle(){}},'../bad.wav',blob),TypeError);
+console.log('EP-008 coordinate, history and boundary tests passed');

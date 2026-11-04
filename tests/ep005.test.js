@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { applyEdits, edgeEdit } from '../src/editing.js';
+const base={sampleRate:10,channels:[Float32Array.from([1,2,3,4,5,6])],length:6,duration:.6};
+const audio=[0.8,0.9];
+const inserted=applyEdits(base,[{type:'insert-audio',start:.2,clip:{sampleRate:10,channels:[Float32Array.from(audio)]}},{type:'replace',start:.4,end:.6,clip:{sampleRate:10,channels:[Float32Array.from([7])]}}]);
+assert.deepEqual([...inserted.channels[0]].map(x=>Math.round(x*10)/10),[1,2,.8,.9,3,4,7]);
+const removed=applyEdits(base,[{type:'delete',start:.2,end:.4}]);assert.deepEqual([...removed.channels[0]],[1,2,5,6]);
+const headed=edgeEdit(base,{prependSeconds:.2,appendSeconds:.1});assert.equal(headed.length,9);assert.deepEqual([...headed.channels[0].slice(0,2)],[0,0]);
+assert.throws(()=>applyEdits(base,[{type:'delete',start:0,end:1}]),RangeError);
+assert.throws(()=>applyEdits(base,[{type:'replace',start:0,end:.3,clip:{sampleRate:10,channels:[Float32Array.of(1)]}},{type:'delete',start:.2,end:.4}]),/重叠/);
+assert.throws(()=>applyEdits(base,[{type:'insert-audio',start:0,clip:{sampleRate:20,channels:[Float32Array.of(1)]}}]),/采样率/);
+console.log('EP-005/006 tests passed');

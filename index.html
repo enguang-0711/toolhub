@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>声迹 · 音频匹配与编辑</title>
+<style>
+:root{color-scheme:dark;--bg:#0c111b;--panel:#141c29;--panel2:#1a2534;--line:#29364a;--text:#edf3fb;--muted:#90a0b7;--blue:#76a9ff;--cyan:#73e1d2;--green:#69d7aa;--red:#ff8f9c}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0,#18334b 0,transparent 42%),var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit;color:inherit}button{border:1px solid var(--line);border-radius:9px;background:var(--panel2);padding:9px 13px;cursor:pointer}button:hover:not(:disabled){border-color:#5887d3;background:#21344d}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:#3379e8;border-color:#3379e8;color:white;font-weight:650}.primary:hover:not(:disabled){background:#2868d2}.danger{color:#ffb0b9}.wrap{max-width:1360px;margin:auto;padding:27px 24px}.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:23px}.brand{display:flex;align-items:center;gap:12px}.logo{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:linear-gradient(135deg,#3681ed,#4ac9bb);font-size:20px;color:#061520;font-weight:800}.brand h1{margin:0;font-size:22px;letter-spacing:.2px}.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}.badge{border:1px solid #31555b;color:#8cdbd0;background:#142a32;border-radius:99px;padding:5px 10px;font-size:12px}.grid{display:grid;grid-template-columns:minmax(330px,390px) minmax(0,1fr);gap:18px;align-items:start}.panel{background:#121a26eF;border:1px solid var(--line);border-radius:15px;padding:17px;box-shadow:0 10px 40px #0002}.panel h2{font-size:14px;margin:0 0 13px;letter-spacing:.2px}.label{display:block;color:var(--muted);font-size:12px;font-weight:600;margin:14px 0 7px}.pickers{display:flex;gap:8px;flex-wrap:wrap}.pickers button{flex:1;min-width:120px}.filemeta{margin-top:7px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.range{display:flex;align-items:center;gap:10px}.range input{flex:1;accent-color:var(--blue)}input[type=number]{width:100px;background:#0d1520;border:1px solid var(--line);border-radius:8px;padding:8px}.hint{font-size:11px;color:#8192aa;margin:5px 0 0}.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.row button{font-size:12px;padding:7px 10px}.bar{height:8px;background:#273448;border-radius:9px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#5f91ff,#69e1c8);transition:width .1s}.status{font-size:12px;color:var(--muted);margin-top:7px;min-height:18px}.workspace{display:grid;gap:18px}.wavebox{padding:12px;background:#0b121c;border:1px solid #253348;border-radius:11px;overflow:auto}canvas{display:block;width:100%;height:150px;cursor:crosshair}.timeline-meta{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;padding:4px 2px 0}.matchlist{max-height:270px;overflow:auto}.match{display:grid;grid-template-columns:60px 1fr auto auto;align-items:center;gap:11px;padding:10px;border-bottom:1px solid #263247;font-size:12px}.match:last-child{border:0}.score{color:var(--green);font-variant-numeric:tabular-nums;font-weight:700}.pill{border-radius:99px;background:#19352e;color:#82dbb4;padding:3px 7px;font-size:11px}.match small{color:var(--muted)}.editgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.editgrid label{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:12px}.editgrid input,.editgrid select{width:100%;background:#0d1520;border:1px solid var(--line);border-radius:8px;padding:8px}.edit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.subtle{color:var(--muted);font-size:11px}.righthead{display:flex;align-items:center;justify-content:space-between;gap:12px}.righthead h2{margin-bottom:0}.actions{display:flex;gap:8px;flex-wrap:wrap}.sliderinput{width:70px!important}#errors{color:var(--red);white-space:pre-wrap;font-size:12px}.empty{padding:22px;text-align:center;color:var(--muted)}.target-option{padding:8px 10px;background:#101825;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px}.toggle{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.toggle input{accent-color:var(--blue)}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.wrap{padding:18px 13px}.left{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}.left>.panel{margin:0}.brand h1{font-size:19px}}
+@media(max-width:600px){.left{grid-template-columns:1fr}.top{align-items:flex-start}.badge{font-size:10px}.match{grid-template-columns:48px 1fr auto}.match .m-actions{grid-column:2/4}.editgrid{grid-template-columns:1fr}.righthead{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body><div class="wrap">
+<header class="top"><div class="brand"><div class="logo">∿</div><div><h1>声迹 <span style="font-weight:400;color:#9db2ce">Sound Trace</span></h1><p>本地音频匹配 · 精准定位 · 非破坏性编辑</p></div></div><span class="badge">● 离线处理 · 不上传音频</span></header>
+<div class="grid">
+<aside class="left">
+<section class="panel"><h2>01　导入音频</h2><span class="label">参考声音（模板）</span><div class="pickers"><button id="refPick">选择参考片段</button><button id="refPlay" disabled>▶ 试听参考</button></div><div id="refName" class="filemeta">还未选择参考声音。可使用短音效/语音片段。</div><input id="refFile" type="file" accept="audio/*,.wav" hidden>
+<span class="label">待扫描音频</span><div class="pickers"><button id="targetPick">添加音频文件</button><button id="folderPick">添加文件夹</button></div><input id="targetFiles" type="file" accept="audio/*,.wav" multiple hidden><input id="targetFolder" type="file" accept="audio/*,.wav" webkitdirectory multiple hidden><div id="targets" class="filemeta">尚无目标音频</div></section>
+<section class="panel"><h2>02　匹配设置</h2><span class="label">匹配分数阈值 <strong id="thresholdText">78%</strong></span><div class="range"><input id="threshold" type="range" min="40" max="99" value="78"><input id="thresholdNum" class="sliderinput" type="number" min="40" max="99" value="78">%</div><p class="hint">分数是波形相关度，不等同统计概率。越高越严格；建议结合试听确认。</p><span class="label">每个命中间隔</span><div class="row"><input id="gap" type="number" min="0" max="60" step="0.05" value="0.15"><span class="subtle">秒　最多</span><input id="maxHits" type="number" min="1" max="1000" value="100"><span class="subtle">个</span></div><div class="edit-actions"><button id="scan" class="primary" disabled>⌕　开始扫描</button><button id="cancel" disabled>取消</button></div><div class="bar"><i id="progress"></i></div><div id="scanStatus" class="status">等待导入参考与目标音频</div></section>
+<section class="panel"><h2>03　全局首尾补音</h2><div class="editgrid"><label>开头静音（秒）<input id="headSilence" type="number" min="0" step="0.1" value="0"></label><label>结尾静音（秒）<input id="tailSilence" type="number" min="0" step="0.1" value="0"></label><label>开头插入音频<input id="headAudio" type="file" accept="audio/*,.wav"></label><label>结尾插入音频<input id="tailAudio" type="file" accept="audio/*,.wav"></label></div><div class="edit-actions"><button id="edgeApply">应用到选中文件</button></div></section>
+</aside>
+<main class="workspace">
+<section class="panel"><div class="righthead"><h2>04　匹配结果与波形定位</h2><div class="actions"><button id="playTarget" disabled>▶ 播放目标</button><button id="previewEdit" disabled>▶ 预览编辑</button></div></div><div class="wavebox" style="margin-top:13px"><canvas id="wave" width="1200" height="220" aria-label="目标音频波形"></canvas><div class="timeline-meta"><span id="waveStart">0.00 s</span><span id="selectedTime">点击命中跳转试听</span><span id="waveEnd">0.00 s</span></div></div><div class="row" style="margin-top:11px"><label class="toggle"><input id="acceptAll" type="checkbox" checked>默认接受新命中</label><select id="targetSelect" class="target-option"><option value="">选择目标文件</option></select><span id="hitCount" class="subtle">0 个匹配</span></div><div id="matches" class="matchlist"><div class="empty">导入参考声音和目标音频后开始扫描。</div></div><div id="errors"></div></section>
+<section class="panel"><h2>05　命中处编辑 <span class="subtle">（操作坐标基于原始音频；替换/删除区间不能重叠）</span></h2><div class="editgrid"><label>操作<select id="editType"><option value="insert-silence">命中前插入静音</option><option value="insert-after-silence">命中后插入静音</option><option value="insert-audio">命中前插入音频</option><option value="insert-after-audio">命中后插入音频</option><option value="replace">替换命中片段为音频</option><option value="delete">删除命中片段</option></select></label><label>静音时长（秒）<input id="editSeconds" type="number" min="0" max="600" step="0.1" value="1"></label><label>插入/替换音频<input id="editAudio" type="file" accept="audio/*,.wav"></label><label>编辑作用<select id="editScope"><option value="accepted">所有已接受命中</option><option value="selected">仅选中命中</option></select></label></div><div class="edit-actions"><button id="applyEdit" class="primary" disabled>应用编辑</button><button id="undo" disabled>↶ 撤销</button><button id="redo" disabled>↷ 重做</button><button id="reset" disabled>重置原始音频</button><button id="export" disabled>导出 WAV</button><button id="chooseOutput">选择输出文件夹</button></div><div id="outputFolder" class="status">未选择文件夹；可直接下载导出文件。</div><div id="editStatus" class="status">扫描命中并选择目标后可编辑。</div></section>
+<section class="panel"><h2>06　批量结果</h2><p class="subtle">每个目标文件独立扫描和编辑。可逐个切换波形、确认命中与导出。</p><div id="batchResults" class="matchlist"><div class="empty">等待处理文件</div></div></section>
+</main></div></div>
+
+\n\n
+
+
+<script id="app-bundle">
+
+/* --- src/state.js --- */
+const PROJECT = Object.freeze({
+  title: '音频匹配与编辑器',
+  version: '1.0.0',
+  limits: Object.freeze({ maxSeconds: 600, maxTemplateSeconds: 30, maxExportBytes: 0xffffffff - 36 }),
+});
+
+let projectSequence = 0;
+
+function createId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  projectSequence += 1;
+  return `project-${Date.now().toString(36)}-${projectSequence.toString(36)}`;
+}
+
+function createProject(file) {
+  return {
+    id: createId(),
+    file,
+    sourceBuffer: null,
+    currentBuffer: null,
+    analysisSamples: null,
+    templateSamples: null,
+    matches: [],
+    edits: [],
+    history: [],
+    historyIndex: 0,
+    status: 'idle',
+    error: null,
+  };
+}
+
+function validateDuration(seconds, name = '时长') {
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > PROJECT.limits.maxSeconds) {
+    throw new RangeError(`${name}必须在 0 到 ${PROJECT.limits.maxSeconds} 秒之间`);
+  }
+  return seconds;
+}
+
+
+/* --- src/audio.js --- */
+
+const ANALYSIS_RATE = 11025;
+
+function toMonoAtRate(audioBuffer, targetRate = ANALYSIS_RATE) {
+  const { numberOfChannels, sampleRate, length } = audioBuffer;
+  if (!Number.isInteger(numberOfChannels) || numberOfChannels < 1 || !Number.isFinite(sampleRate) || sampleRate <= 0 || !Number.isInteger(length) || length < 1) {
+    throw new TypeError('音频缓冲区参数无效');
+  }
+  if (!Number.isFinite(targetRate) || targetRate <= 0) throw new RangeError('分析采样率无效');
+  const mono = new Float32Array(length);
+  for (let ch = 0; ch < numberOfChannels; ch++) {
+    const channel = audioBuffer.getChannelData(ch);
+    if (!channel || channel.length !== length) throw new TypeError('音频声道数据长度不一致');
+    for (let i = 0; i < length; i++) mono[i] += channel[i] / numberOfChannels;
+  }
+  if (sampleRate === targetRate) return { samples: mono, sampleRate: targetRate };
+  const outputLength = Math.max(1, Math.round(length * targetRate / sampleRate));
+  const result = new Float32Array(outputLength);
+  const ratio = sampleRate / targetRate;
+  // Box averaging acts as a lightweight anti-alias filter when downsampling.
+  for (let j = 0; j < outputLength; j++) {
+    const left = j * ratio, right = Math.min(length, (j + 1) * ratio);
+    const from = Math.floor(left), to = Math.max(from + 1, Math.ceil(right));
+    let sum = 0, count = 0;
+    for (let i = from; i < to && i < length; i++) { sum += mono[i]; count++; }
+    result[j] = count ? sum / count : mono[Math.min(from, length - 1)];
+  }
+  return { samples: result, sampleRate: targetRate };
+}
+
+async function decodeAudioFile(file, audioContext, { maxSeconds = PROJECT.limits.maxSeconds } = {}) {
+  if (!file || typeof file.arrayBuffer !== 'function' || !Number.isFinite(file.size) || file.size <= 0) {
+    throw new TypeError('请选择非空音频文件');
+  }
+  if (!audioContext || typeof audioContext.decodeAudioData !== 'function') throw new TypeError('浏览器音频解码器不可用');
+  let decoded;
+  try {
+    decoded = await audioContext.decodeAudioData(await file.arrayBuffer());
+  } catch {
+    throw new Error(`无法解码“${file.name || '音频'}”；请尝试 PCM WAV 或浏览器支持的音频格式`);
+  }
+  if (!decoded || decoded.length < 1 || decoded.duration > maxSeconds) {
+    throw new RangeError(`音频时长须大于 0 且不超过 ${maxSeconds} 秒`);
+  }
+  const analysis = toMonoAtRate(decoded);
+  return { file, buffer: decoded, samples: analysis.samples, sampleRate: analysis.sampleRate, duration: decoded.duration };
+}
+
+
+/* --- src/matcher.js --- */
+const EPS = 1e-12;
+
+function prepareTemplate(input, tapCount = 128) {
+  if (!input?.length) throw new TypeError('参考音频不能为空');
+  const stride = Math.max(1, Math.floor(input.length / tapCount));
+  const taps = [];
+  let mean = 0;
+  for (let i = 0; i < input.length; i += stride) {
+    const value = input[i];
+    if (!Number.isFinite(value)) throw new TypeError('参考音频包含无效样本');
+    taps.push({ offset: i, value }); mean += value;
+  }
+  mean /= taps.length;
+  let energy = 0;
+  for (const tap of taps) { tap.value -= mean; energy += tap.value * tap.value; }
+  return { taps, energy };
+}
+
+function scoreWindow(target, template, start) {
+  let mean = 0;
+  for (const tap of template.taps) mean += target[start + tap.offset];
+  mean /= template.taps.length;
+  let dot = 0, energy = 0;
+  for (const tap of template.taps) {
+    const x = target[start + tap.offset] - mean;
+    dot += x * tap.value; energy += x * x;
+  }
+  if (energy <= EPS || template.energy <= EPS) return 0;
+  return Math.max(-1, Math.min(1, dot / Math.sqrt(energy * template.energy)));
+}
+
+async function matchTemplate(reference, target, {
+  sampleRate = 11025, threshold = 0.75, maxMatches = 100,
+  minGapSeconds = 0.05, coarseStep = 8, signal = null,
+  onProgress = () => {}, yieldControl = () => new Promise(resolve => setTimeout(resolve, 0)),
+} = {}) {
+  if (!reference?.length || !target?.length) throw new TypeError('参考和目标音频都必须非空');
+  if (reference.length > target.length) return [];
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new RangeError('阈值须在 0 到 1 之间');
+  if (!Number.isInteger(maxMatches) || maxMatches < 1 || maxMatches > 1000) throw new RangeError('候选数量上限无效');
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Number.isInteger(coarseStep) || coarseStep < 1) throw new RangeError('搜索参数无效');
+  for (const x of target) if (!Number.isFinite(x)) throw new TypeError('目标音频包含无效样本');
+  const template = prepareTemplate(reference);
+  if (template.energy <= EPS) return [];
+  const last = target.length - reference.length;
+  const step = Math.max(coarseStep, Math.ceil(reference.length / 160));
+  const total = Math.floor(last / step) + 1;
+  const candidates = [];
+  let best = { index: 0, score: -1 }, prev = null;
+  for (let k = 0, i = 0; i <= last; i += step, k++) {
+    if (signal?.aborted) throw new DOMException('扫描已取消', 'AbortError');
+    const score = Math.abs(scoreWindow(target, template, i));
+    if (score > best.score) best = { index: i, score };
+    if (!prev || score >= prev.score) prev = { index: i, score };
+    else if (prev.score >= threshold) { candidates.push(prev); prev = { index: i, score }; }
+    if (k % 128 === 0) {
+      onProgress(Math.min(0.9, k / Math.max(1, total) * 0.9));
+      await yieldControl();
+    }
+  }
+  if (prev?.score >= threshold) candidates.push(prev);
+  if (best.score >= threshold) candidates.push(best);
+  const refined = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const from = Math.max(0, candidate.index - step), to = Math.min(last, candidate.index + step);
+    let peak = { index: candidate.index, score: -1, signed: 0 };
+    for (let i = from; i <= to; i++) {
+      const signed = scoreWindow(target, template, i);
+      if (Math.abs(signed) > peak.score) peak = { index: i, score: Math.abs(signed), signed };
+    }
+    if (peak.score >= threshold && !seen.has(peak.index)) { refined.push(peak); seen.add(peak.index); }
+  }
+  refined.sort((a,b) => b.score-a.score);
+  const gap = Math.max(Math.round(minGapSeconds * sampleRate), reference.length, 1);
+  const selected = [];
+  for (const item of refined) {
+    if (selected.every(other => Math.abs(other.index - item.index) >= gap)) selected.push(item);
+    if (selected.length >= maxMatches) break;
+  }
+  selected.sort((a,b) => a.index-b.index); onProgress(1);
+  return selected.map((m,i) => ({ id:`match-${m.index}-${i}`, startSample:m.index, endSample:m.index+reference.length,
+    start:m.index/sampleRate, end:(m.index+reference.length)/sampleRate, score:m.score,
+    polarity:m.signed < 0 ? -1 : 1, accepted:true }));
+}
+
+
+/* --- src/preview.js --- */
+function createAudioFromBuffer(context, buffer) {
+  const result = context.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) result.copyToChannel(buffer.getChannelData(ch), ch);
+  return result;
+}
+
+function playBuffer(context, buffer, { start = 0, end = buffer.duration, gain = 1 } = {}) {
+  if (!(start >= 0 && end > start && end <= buffer.duration) || !Number.isFinite(gain) || gain < 0 || gain > 4) {
+    throw new RangeError('试听区间或音量无效');
+  }
+  const source = context.createBufferSource();
+  const volume = context.createGain();
+  source.buffer = buffer;
+  volume.gain.value = gain;
+  source.connect(volume); volume.connect(context.destination);
+  source.start(0, start, end - start);
+  return source;
+}
+
+function filterMatches(matches, threshold) {
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new RangeError('阈值须在 0 到 1 之间');
+  return matches.map(match => ({ ...match, visible: match.score >= threshold }));
+}
+
+
+/* --- src/editing.js --- */
+function normalizeClip(clip, sampleRate, channels) {
+  if (clip === 'silence') return Array.from({length:channels}, () => new Float32Array(0));
+  if (clip?.sampleRate !== sampleRate || !Array.isArray(clip.channels) || clip.channels.length < 1) throw new TypeError('插入音频采样率或声道数据无效');
+  const length = clip.channels[0].length;
+  if (!length || clip.channels.some(c => c.length !== length)) throw new TypeError('插入音频声道长度无效');
+  return Array.from({length:channels}, (_, ch) => clip.channels[Math.min(ch, clip.channels.length - 1)]);
+}
+
+function silenceClip(seconds, sampleRate, channels) {
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 600) throw new RangeError('静音时长须为 0 到 600 秒');
+  const length = Math.round(seconds * sampleRate);
+  return Array.from({length:channels}, () => new Float32Array(length));
+}
+
+function applyEdits(audio, edits) {
+  const { sampleRate, channels } = audio || {};
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Array.isArray(channels) || !channels.length) throw new TypeError('原始音频数据无效');
+  const length = channels[0].length;
+  if (!length || channels.some(c => c.length !== length)) throw new TypeError('原始音频声道长度不一致');
+  if (!Array.isArray(edits)) throw new TypeError('编辑列表无效');
+  const ops = edits.map((edit, index) => {
+    const start = Math.round(edit.start * sampleRate), end = Math.round((edit.end ?? edit.start) * sampleRate);
+    if (!Number.isFinite(edit.start) || !Number.isFinite(edit.end ?? edit.start) || start < 0 || end < start || end > length) throw new RangeError('编辑区间超出原始音频范围');
+    let inserted;
+    if (edit.type === 'insert-silence') inserted = silenceClip(edit.duration, sampleRate, channels.length);
+    else if (['insert-audio','replace'].includes(edit.type)) inserted = normalizeClip(edit.clip, sampleRate, channels.length);
+    else if (edit.type !== 'delete') throw new TypeError(`不支持的编辑类型：${edit.type}`);
+    if (edit.type === 'replace' && end === start) throw new RangeError('替换区间不能为空');
+    return { ...edit, start, end, inserted, order: index };
+  }).sort((a,b) => a.start-b.start || a.order-b.order);
+
+  let consumedUntil = 0;
+  for (const op of ops) {
+    if (op.start < consumedUntil) throw new RangeError('替换/删除区间重叠，或插入点落在已编辑区间内');
+    if ((op.type === 'replace' || op.type === 'delete') && op.end > op.start) consumedUntil = op.end;
+  }
+  const output = Array.from({length:channels.length}, () => []);
+  const appendSource = (from,to) => { for(let ch=0;ch<channels.length;ch++) if(to>from) output[ch].push(channels[ch].subarray(from,to)); };
+  const appendClip = clip => { if(clip) for(let ch=0;ch<channels.length;ch++) if(clip[ch].length) output[ch].push(clip[ch]); };
+  let cursor=0;
+  let insertionPoint=-1;
+  for(const op of ops){
+    if(op.start>cursor) { appendSource(cursor,op.start); cursor=op.start; insertionPoint=-1; }
+    else if(op.start<cursor) throw new RangeError('编辑坐标发生重叠或逆序');
+    if(op.type==='insert-silence'||op.type==='insert-audio'){
+      if(insertionPoint!==op.start){appendSource(cursor,op.start);insertionPoint=op.start;}
+      appendClip(op.inserted);
+    }else if(op.type==='replace'){appendClip(op.inserted);cursor=op.end;insertionPoint=-1;}
+    else {cursor=op.end;insertionPoint=-1;}
+  }
+  appendSource(cursor,length);
+  const result=output.map(parts=>{ const total=parts.reduce((n,p)=>n+p.length,0); const data=new Float32Array(total); let at=0; for(const p of parts){data.set(p,at);at+=p.length} return data; });
+  if(result.some(c=>c.length!==result[0].length)) throw new Error('编辑后声道长度不一致');
+  return {sampleRate,channels:result,length:result[0].length,duration:result[0].length/sampleRate};
+}
+
+function edgeEdit(audio, { prependSeconds=0, appendSeconds=0, prependClip=null, appendClip=null }={}) {
+  const end=audio.channels[0].length/audio.sampleRate;
+  const edits=[];
+  if(prependSeconds) edits.push({type:'insert-silence',start:0,duration:prependSeconds});
+  if(prependClip) edits.push({type:'insert-audio',start:0,clip:prependClip});
+  if(appendClip) edits.push({type:'insert-audio',start:end,clip:appendClip});
+  if(appendSeconds) edits.push({type:'insert-silence',start:end,duration:appendSeconds});
+  return applyEdits(audio,edits);
+}
+
+
+/* --- src/history.js --- */
+class History {
+  constructor(initialValue, limit = 30) {
+    if (!Number.isInteger(limit) || limit < 1) throw new RangeError('历史上限无效');
+    this.limit=limit; this.items=[initialValue]; this.index=0;
+  }
+  get current(){return this.items[this.index]}
+  get canUndo(){return this.index>0}
+  get canRedo(){return this.index<this.items.length-1}
+  push(value){this.items=this.items.slice(0,this.index+1);this.items.push(value);if(this.items.length>this.limit+1)this.items.shift();this.index=this.items.length-1;return this.current}
+  undo(){if(this.canUndo)this.index--;return this.current}
+  redo(){if(this.canRedo)this.index++;return this.current}
+  reset(value){this.items=[value];this.index=0;return this.current}
+}
+
+
+/* --- src/export.js --- */
+function encodeWav(audio) {
+  const { sampleRate, channels } = audio;
+  if (!Number.isInteger(sampleRate) || sampleRate < 1000 || !Array.isArray(channels) || !channels.length) throw new TypeError('导出音频参数无效');
+  const length = channels[0].length;
+  if (!length || channels.some(c => c.length !== length)) throw new TypeError('导出声道长度无效');
+  const bytes = length * channels.length * 2;
+  if (!Number.isSafeInteger(bytes) || bytes > 0xffffffff - 36) throw new RangeError('WAV 超过 4 GB 上限');
+  const buffer = new ArrayBuffer(44 + bytes), view = new DataView(buffer);
+  const text = (offset, value) => { for(let i=0;i<value.length;i++) view.setUint8(offset+i,value.charCodeAt(i)); };
+  text(0,'RIFF'); view.setUint32(4,36+bytes,true); text(8,'WAVE'); text(12,'fmt ');
+  view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,channels.length,true);
+  view.setUint32(24,sampleRate,true); view.setUint32(28,sampleRate*channels.length*2,true);
+  view.setUint16(32,channels.length*2,true); view.setUint16(34,16,true); text(36,'data'); view.setUint32(40,bytes,true);
+  let offset=44;
+  for(let i=0;i<length;i++) for(let ch=0;ch<channels.length;ch++) {
+    const x=channels[ch][i]; if(!Number.isFinite(x)) throw new TypeError('音频包含无效采样');
+    const clamped=Math.max(-1,Math.min(1,x)); view.setInt16(offset,clamped<0?Math.round(clamped*32768):Math.round(clamped*32767),true); offset+=2;
+  }
+  return new Blob([buffer],{type:'audio/wav'});
+}
+
+function writeWavToDirectory(directory, name, blob) {
+  if (!directory?.getFileHandle || !/^[^\\/:*?"<>|]+\.wav$/i.test(name)) return Promise.reject(new TypeError('输出目录或文件名无效'));
+  return (async()=>{
+    const handle=await directory.getFileHandle(name,{create:true});
+    const stream=await handle.createWritable({keepExistingData:false});
+    try { await stream.write(blob); await stream.close(); }
+    catch(error) { try { await stream.abort(); } catch {} throw error; }
+  })();
+}
+
+function downloadBlob(blob, filename) {
+  const safe=String(filename||'audio.wav').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_');
+  const url=URL.createObjectURL(blob), link=document.createElement('a');
+  link.href=url; link.download=safe.endsWith('.wav')?safe:`${safe}.wav`; link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+
+/* --- src/app.js --- */
+
+
+
+
+
+
+const $ = id => document.getElementById(id);
+const state = { context:null, ref:null, projects:[], selected:null, matches:[], abort:null, player:null, selectedHit:null, outputDirectory:null };
+const error = message => { $('errors').textContent = message || ''; };
+const formatTime = seconds => `${seconds.toFixed(3)} s`;
+const formatScore = score => `${(score*100).toFixed(1)}%`;
+const ctx = async () => {
+  const AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC) throw new Error('当前浏览器不支持 Web Audio API');
+  if(!state.context) state.context=new AC();
+  if(state.context.state==='suspended') await state.context.resume();
+  return state.context;
+};
+const decode = async file => {
+  const context=await ctx();
+  try { return await context.decodeAudioData(await file.arrayBuffer()); }
+  catch { throw new Error(`无法解码 ${file.name}；请尝试 WAV 或浏览器支持的音频格式`); }
+};
+const bufferToClip = buffer => ({sampleRate:buffer.sampleRate,channels:Array.from({length:buffer.numberOfChannels},(_,i)=>new Float32Array(buffer.getChannelData(i)))});
+const sourceAudio = project => ({sampleRate:project.buffer.sampleRate,channels:Array.from({length:project.buffer.numberOfChannels},(_,i)=>project.buffer.getChannelData(i)),length:project.buffer.length,duration:project.buffer.duration});
+const currentAudio = project => applyEdits(sourceAudio(project),project.history.current.operations);
+function buttonStatus(){
+  $('scan').disabled=!state.ref||!state.projects.length;
+  const p=state.selected;
+  $('playTarget').disabled=!p;
+  $('previewEdit').disabled=!p;
+  $('applyEdit').disabled=!p||!state.matches.some(m=>m.visible&&m.accepted);
+  $('undo').disabled=!p||!p.history.canUndo;
+  $('redo').disabled=!p||!p.history.canRedo;
+  $('reset').disabled=!p;
+  $('export').disabled=!p;
+}
+function setSelected(project){state.selected=project;state.matches=project?.matches||[];state.selectedHit=null;renderMatches();drawWave();buttonStatus();}
+function drawWave(){
+  const canvas=$('wave'),c=canvas.getContext('2d'),p=state.selected;
+  c.clearRect(0,0,canvas.width,canvas.height);c.fillStyle='#0b121c';c.fillRect(0,0,canvas.width,canvas.height);
+  if(!p){$('waveEnd').textContent='0.00 s';return;}
+  const duration=p.buffer.duration;if(!Number.isFinite(duration)||duration<=0){$('waveEnd').textContent='0.00 s';return;}
+  const data=p.buffer.getChannelData(0), width=canvas.width,height=canvas.height, mid=height/2;
+  $('waveEnd').textContent=`${duration.toFixed(2)} s`;
+  c.strokeStyle='#29415c';c.lineWidth=1;c.beginPath();c.moveTo(0,mid);c.lineTo(width,mid);c.stroke();
+  const bucket=Math.max(1,Math.ceil(data.length/width));
+  for(let x=0;x<width;x++){let min=1,max=-1;const begin=x*bucket;for(let j=begin;j<Math.min(data.length,begin+bucket);j++){const v=data[j];if(v<min)min=v;if(v>max)max=v;}c.strokeStyle='#6fa8ff';c.beginPath();c.moveTo(x,mid-max*mid*.88);c.lineTo(x,mid-min*mid*.88);c.stroke();}
+  for(const m of p.matches){if(!m.visible)continue;const x=m.start/duration*width,w=Math.max(2,(m.end-m.start)/duration*width);c.fillStyle=m.accepted?'#53d7b42a':'#ff889526';c.fillRect(x,0,w,height);c.strokeStyle=m.accepted?'#57d8b5':'#ff8895';c.strokeRect(x,0,w,height);}
+}
+function renderTargets(){
+ const el=$('targets'),select=$('targetSelect');el.replaceChildren();select.replaceChildren();
+ if(!state.projects.length){el.textContent='尚无目标音频';select.add(new Option('选择目标文件',''));return;}
+ state.projects.forEach((p,i)=>{const div=document.createElement('div');div.className='target-option';div.style.marginTop='5px';div.textContent=`${i+1}. ${p.file.name} · ${p.buffer.duration.toFixed(1)} 秒`;el.append(div);const o=new Option(p.file.name,String(i));select.add(o);});
+ if(state.selected)select.value=String(state.projects.indexOf(state.selected));
+ $('batchResults').innerHTML=state.projects.map((p,i)=>`<div class="match"><span>#${i+1}</span><span>${escapeHtml(p.file.name)}</span><span class="pill">${p.matches.length} 命中</span><button data-open="${i}">查看</button></div>`).join('');
+ document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>setSelected(state.projects[Number(b.dataset.open)]));
+}
+function escapeHtml(text){const d=document.createElement('div');d.textContent=text;return d.innerHTML;}
+function renderMatches(){
+ const root=$('matches'),p=state.selected;
+ if(!p){root.innerHTML='<div class="empty">选择目标文件以查看匹配结果</div>';$('hitCount').textContent='0 个匹配';return;}
+ const threshold=Number($('threshold').value)/100;
+ for(const m of p.matches)m.visible=m.score>=threshold;
+ const shown=p.matches.filter(m=>m.visible);$('hitCount').textContent=`${shown.length} / ${p.matches.length} 个候选`;
+ if(!shown.length){root.innerHTML='<div class="empty">没有达到阈值的命中；可降低分数阈值或重新扫描。</div>';drawWave();return;}
+ root.innerHTML=shown.map((m,i)=>`<div class="match"><span class="score">${formatScore(m.score)}</span><span><b>${formatTime(m.start)}</b> — ${formatTime(m.end)}<br><small>${m.polarity<0?'反相相关':'波形相关'} · ${m.accepted?'已接受':'已排除'}</small></span><label class="toggle"><input data-accept="${m.id}" type="checkbox" ${m.accepted?'checked':''}>接受</label><span class="m-actions"><button data-play="${m.id}">▶ 试听</button> <button data-select="${m.id}">定位</button></span></div>`).join('');
+ root.querySelectorAll('[data-accept]').forEach(el=>el.onchange=()=>{const m=p.matches.find(x=>x.id===el.dataset.accept);m.accepted=el.checked;buttonStatus();drawWave();renderMatches();});
+ root.querySelectorAll('[data-play]').forEach(el=>el.onclick=()=>playRange(p,p.matches.find(x=>x.id===el.dataset.play)));
+ root.querySelectorAll('[data-select]').forEach(el=>el.onclick=()=>{state.selectedHit=p.matches.find(x=>x.id===el.dataset.select);$('selectedTime').textContent=`选中 ${formatTime(state.selectedHit.start)} — ${formatTime(state.selectedHit.end)}`;playRange(p,state.selectedHit);});
+ drawWave();buttonStatus();
+}
+function stopPlayer(){if(state.player){try{state.player.stop();}catch{}state.player=null;}}
+async function playRange(project,match=null,edited=false){stopPlayer();try{const context=await ctx();let buffer;if(edited){const audio=currentAudio(project);buffer=context.createBuffer(audio.channels.length,audio.length,audio.sampleRate);audio.channels.forEach((ch,i)=>buffer.copyToChannel(ch,i));}else buffer=project.buffer;const start=match?match.start:0,end=match?match.end:buffer.duration;state.player=playBuffer(context,buffer,{start,end});state.player.onended=()=>state.player=null;}catch(e){error(e.message);}}
+function renderProgress(p,message){$('progress').style.width=`${Math.round(p*100)}%`;$('scanStatus').textContent=message;}
+
+$('refPick').addEventListener('click',()=>$('refFile').click());
+$('targetPick').addEventListener('click',()=>$('targetFiles').click());
+$('folderPick').addEventListener('click',()=>$('targetFolder').click());
+
+
+$('refFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;error('');try{const b=await decode(f);if(b.duration>30)throw new Error('参考模板最长 30 秒；请先裁剪成较短片段');state.ref={file:f,buffer:b,...toMonoAtRate(b)};$('refName').textContent=`${f.name} · ${b.duration.toFixed(2)} 秒 · ${b.numberOfChannels} 声道`;$('refPlay').disabled=false;buttonStatus();}catch(err){error(err.message);}};
+$('refPlay').onclick=()=>state.ref&&playRange({buffer:state.ref.buffer},null);
+async function addTargets(fileList){error('');for(const file of fileList){if(state.projects.some(p=>p.file===file))continue;try{const buffer=await decode(file);if(buffer.duration>600)throw new Error('单个音频最长 10 分钟');const samples=toMonoAtRate(buffer);state.projects.push({file,buffer,samples:samples.samples,sampleRate:samples.sampleRate,matches:[],history:new History({operations:[],labels:[]})});}catch(err){error(`${$('errors').textContent}${$('errors').textContent?'\n':''}${file.name}：${err.message}`);}}renderTargets();if(!state.selected&&state.projects.length)setSelected(state.projects[0]);buttonStatus();}
+$('targetFiles').onchange=e=>{addTargets(e.target.files);e.target.value='';};$('targetFolder').onchange=e=>{addTargets(e.target.files);e.target.value='';};$('targetSelect').onchange=e=>{const p=state.projects[Number(e.target.value)];if(p)setSelected(p);};
+$('threshold').oninput=e=>{$('thresholdText').textContent=`${e.target.value}%`;$('thresholdNum').value=e.target.value;if(state.projects.some(p=>p.matches.length)){$('scanStatus').textContent='阈值已变更；请重新扫描以更新候选。';}renderMatches();};$('thresholdNum').onchange=e=>{const v=Math.max(40,Math.min(99,Number(e.target.value)||40));$('threshold').value=v;$('thresholdText').textContent=`${v}%`;if(state.projects.some(p=>p.matches.length))$('scanStatus').textContent='阈值已变更；请重新扫描以更新候选。';renderMatches();};
+$('scan').onclick=async()=>{if(!state.ref||!state.projects.length)return;state.abort=new AbortController();$('cancel').disabled=false;$('scan').disabled=true;error('');try{for(let idx=0;idx<state.projects.length;idx++){const p=state.projects[idx];renderProgress(0,`扫描 ${idx+1}/${state.projects.length}：${p.file.name}`);p.matches=await matchTemplate(state.ref.samples,p.samples,{sampleRate:p.sampleRate,threshold:Number($('threshold').value)/100,maxMatches:Number($('maxHits').value)||100,minGapSeconds:Number($('gap').value)||0,signal:state.abort.signal,onProgress:x=>renderProgress((idx+x)/state.projects.length,`扫描 ${idx+1}/${state.projects.length}：${p.file.name} · ${Math.round(x*100)}%`)});p.matches.forEach(m=>m.accepted=$('acceptAll').checked);if(p===state.selected)renderMatches();renderTargets();}renderProgress(1,`扫描完成：${state.projects.reduce((a,p)=>a+p.matches.length,0)} 个候选`);}catch(e){if(e.name!=='AbortError')error(e.message);else $('scanStatus').textContent='扫描已取消';}finally{state.abort=null;$('cancel').disabled=true;buttonStatus();}};
+$('cancel').onclick=()=>state.abort?.abort();
+$('playTarget').onclick=()=>state.selected&&playRange(state.selected);$('previewEdit').onclick=()=>state.selected&&playRange(state.selected,null,true);
+$('wave').onclick=e=>{if(!state.selected)return;const r=e.currentTarget.getBoundingClientRect(),time=(e.clientX-r.left)/r.width*state.selected.buffer.duration;$('selectedTime').textContent=`定位 ${formatTime(time)}`;playRange(state.selected,{start:Math.max(0,time-1),end:Math.min(state.selected.buffer.duration,time+2)});};
+function commitOps(ops,label){const p=state.selected;const previous=p.history.current;const allOps=[...previous.operations,...ops];applyEdits(sourceAudio(p),allOps);const snapshot={operations:allOps,labels:[...previous.labels,label]};p.history.push(snapshot);$('editStatus').textContent=`已应用：${label} · 当前 ${currentAudio(p).duration.toFixed(3)} 秒`;renderTargets();drawWave();buttonStatus();}
+$('applyEdit').onclick=async()=>{const p=state.selected;if(!p)return;const matches=p.matches.filter(m=>m.visible&&m.accepted&&($('editScope').value==='accepted'||m===state.selectedHit));if(!matches.length){error('请先选中或接受至少一个命中');return;}error('');try{const type=$('editType').value,seconds=Number($('editSeconds').value),file=$('editAudio').files[0];let clip=null;if(['insert-audio','insert-after-audio','replace'].includes(type)){if(!file)throw new Error('此编辑动作需要选择插入/替换音频');const b=await decode(file);clip=bufferToClip(b);const sr=p.buffer.sampleRate;if(b.sampleRate!==sr)throw new Error(`编辑音频采样率 ${b.sampleRate} 与目标 ${sr} 不同；请先转换成相同采样率`);}const ops=[];for(const m of matches){if(type==='insert-silence')ops.push({type,start:m.start,duration:seconds});else if(type==='insert-after-silence')ops.push({type:'insert-silence',start:m.end,duration:seconds});else if(type==='insert-audio')ops.push({type,start:m.start,clip});else if(type==='insert-after-audio')ops.push({type:'insert-audio',start:m.end,clip});else if(type==='replace')ops.push({type,start:m.start,end:m.end,clip});else if(type==='delete')ops.push({type,start:m.start,end:m.end});}commitOps(ops,`${type} × ${matches.length}`);}catch(e){error(e.message);}};
+$('edgeApply').onclick=async()=>{const p=state.selected;if(!p){error('请先选择目标文件');return;}try{let prependClip=null,appendClip=null;const a=$('headAudio').files[0],b=$('tailAudio').files[0];if(a){const d=await decode(a);if(d.sampleRate!==p.buffer.sampleRate)throw new Error('片头音频采样率需与目标相同');prependClip=bufferToClip(d);}if(b){const d=await decode(b);if(d.sampleRate!==p.buffer.sampleRate)throw new Error('片尾音频采样率需与目标相同');appendClip=bufferToClip(d);}const ops=[];const hs=Number($('headSilence').value)||0,ts=Number($('tailSilence').value)||0;if(hs)ops.push({type:'insert-silence',start:0,duration:hs});if(prependClip)ops.push({type:'insert-audio',start:0,clip:prependClip});const end=p.buffer.duration;if(appendClip)ops.push({type:'insert-audio',start:end,clip:appendClip});if(ts)ops.push({type:'insert-silence',start:end,duration:ts});commitOps(ops,'全局首尾补音');}catch(e){error(e.message);}};
+$('undo').onclick=()=>{const p=state.selected;if(p?.history.canUndo){p.history.undo();commitView('已撤销');}};$('redo').onclick=()=>{const p=state.selected;if(p?.history.canRedo){p.history.redo();commitView('已重做');}};$('reset').onclick=()=>{const p=state.selected;if(p){p.history.reset({operations:[],labels:[]});commitView('已重置为原始音频');}};
+function commitView(msg){const p=state.selected;$('editStatus').textContent=msg;drawWave();buttonStatus();}
+$('chooseOutput').addEventListener('click',async()=>{if(!window.showDirectoryPicker){$('outputFolder').textContent='此浏览器不支持选择输出目录，将使用下载方式。';return;}try{state.outputDirectory=await window.showDirectoryPicker({mode:'readwrite'});$('outputFolder').textContent=`已选择输出文件夹：${state.outputDirectory.name}`;}catch(e){if(e.name!=='AbortError')error(`无法选择文件夹：${e.message}`);}});
+$('export').addEventListener('click',async()=>{try{const p=state.selected;if(!p)throw new Error('请先导入目标音频');const blob=encodeWav(currentAudio(p));const filename=`${p.file.name.replace(/\.[^.]+$/,'')}_edited.wav`;if(state.outputDirectory){await writeWavToDirectory(state.outputDirectory,filename,blob);$('editStatus').textContent=`已保存到 ${state.outputDirectory.name}/${filename}`;}else downloadBlob(blob,filename);}catch(e){error(e.message);}});
+
+
+</script>
+</body></html>
