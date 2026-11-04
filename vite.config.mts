@@ -6,7 +6,6 @@ import { createVitePlugins } from './build/vite/plugin';
 import { OUTPUT_DIR } from './build/constant';
 import { createProxy } from './build/vite/proxy';
 import pkg from './package.json';
-import { createHtmlPlugin } from 'vite-plugin-html';
 import { format } from 'date-fns';
 const { dependencies, devDependencies, name, version } = pkg;
 
@@ -36,7 +35,7 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
       ],
       dedupe: ['vue'],
     },
-    plugins: [...createVitePlugins(viteEnv, isBuild), createHtmlPlugin({ inject: { data: { title: 'Toolhub 管理台' } } })],
+    plugins: createVitePlugins(viteEnv, isBuild),
     define: {
       __APP_ENV__: JSON.stringify(env.APP_ENV),
       __APP_INFO__: JSON.stringify(__APP_INFO__),
