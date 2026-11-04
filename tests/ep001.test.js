@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createProject, PROJECT, validateDuration } from '../src/state.js';
+import { createProject, PROJECT, validateDuration } from '../tools/audio-match-editor/src/state.js';
 
 assert.equal(PROJECT.version, '1.0.0');
 assert.equal(validateDuration(0), 0);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { applyEdits, edgeEdit } from '../src/editing.js';
-import { encodeWav, writeWavToDirectory } from '../src/export.js';
-import { History } from '../src/history.js';
+import { applyEdits, edgeEdit } from '../tools/audio-match-editor/src/editing.js';
+import { encodeWav, writeWavToDirectory } from '../tools/audio-match-editor/src/export.js';
+import { History } from '../tools/audio-match-editor/src/history.js';
 
 const original={sampleRate:10,channels:[Float32Array.from([1,2,3,4,5,6,7,8,9,10])],length:10,duration:1};
 const add={type:'insert-silence',start:.2,duration:.2};

@@ -37,337 +37,10 @@
 
 
 
+
 <script id="app-bundle">
 
-/* --- src/state.js --- */
-const PROJECT = Object.freeze({
-  title: '音频匹配与编辑器',
-  version: '1.0.0',
-  limits: Object.freeze({ maxSeconds: 600, maxTemplateSeconds: 30, maxExportBytes: 0xffffffff - 36 }),
-});
-
-let projectSequence = 0;
-
-function createId() {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  projectSequence += 1;
-  return `project-${Date.now().toString(36)}-${projectSequence.toString(36)}`;
-}
-
-function createProject(file) {
-  return {
-    id: createId(),
-    file,
-    sourceBuffer: null,
-    currentBuffer: null,
-    analysisSamples: null,
-    templateSamples: null,
-    matches: [],
-    edits: [],
-    history: [],
-    historyIndex: 0,
-    status: 'idle',
-    error: null,
-  };
-}
-
-function validateDuration(seconds, name = '时长') {
-  if (!Number.isFinite(seconds) || seconds < 0 || seconds > PROJECT.limits.maxSeconds) {
-    throw new RangeError(`${name}必须在 0 到 ${PROJECT.limits.maxSeconds} 秒之间`);
-  }
-  return seconds;
-}
-
-
-/* --- src/audio.js --- */
-
-const ANALYSIS_RATE = 11025;
-
-function toMonoAtRate(audioBuffer, targetRate = ANALYSIS_RATE) {
-  const { numberOfChannels, sampleRate, length } = audioBuffer;
-  if (!Number.isInteger(numberOfChannels) || numberOfChannels < 1 || !Number.isFinite(sampleRate) || sampleRate <= 0 || !Number.isInteger(length) || length < 1) {
-    throw new TypeError('音频缓冲区参数无效');
-  }
-  if (!Number.isFinite(targetRate) || targetRate <= 0) throw new RangeError('分析采样率无效');
-  const mono = new Float32Array(length);
-  for (let ch = 0; ch < numberOfChannels; ch++) {
-    const channel = audioBuffer.getChannelData(ch);
-    if (!channel || channel.length !== length) throw new TypeError('音频声道数据长度不一致');
-    for (let i = 0; i < length; i++) mono[i] += channel[i] / numberOfChannels;
-  }
-  if (sampleRate === targetRate) return { samples: mono, sampleRate: targetRate };
-  const outputLength = Math.max(1, Math.round(length * targetRate / sampleRate));
-  const result = new Float32Array(outputLength);
-  const ratio = sampleRate / targetRate;
-  // Box averaging acts as a lightweight anti-alias filter when downsampling.
-  for (let j = 0; j < outputLength; j++) {
-    const left = j * ratio, right = Math.min(length, (j + 1) * ratio);
-    const from = Math.floor(left), to = Math.max(from + 1, Math.ceil(right));
-    let sum = 0, count = 0;
-    for (let i = from; i < to && i < length; i++) { sum += mono[i]; count++; }
-    result[j] = count ? sum / count : mono[Math.min(from, length - 1)];
-  }
-  return { samples: result, sampleRate: targetRate };
-}
-
-async function decodeAudioFile(file, audioContext, { maxSeconds = PROJECT.limits.maxSeconds } = {}) {
-  if (!file || typeof file.arrayBuffer !== 'function' || !Number.isFinite(file.size) || file.size <= 0) {
-    throw new TypeError('请选择非空音频文件');
-  }
-  if (!audioContext || typeof audioContext.decodeAudioData !== 'function') throw new TypeError('浏览器音频解码器不可用');
-  let decoded;
-  try {
-    decoded = await audioContext.decodeAudioData(await file.arrayBuffer());
-  } catch {
-    throw new Error(`无法解码“${file.name || '音频'}”；请尝试 PCM WAV 或浏览器支持的音频格式`);
-  }
-  if (!decoded || decoded.length < 1 || decoded.duration > maxSeconds) {
-    throw new RangeError(`音频时长须大于 0 且不超过 ${maxSeconds} 秒`);
-  }
-  const analysis = toMonoAtRate(decoded);
-  return { file, buffer: decoded, samples: analysis.samples, sampleRate: analysis.sampleRate, duration: decoded.duration };
-}
-
-
-/* --- src/matcher.js --- */
-const EPS = 1e-12;
-
-function prepareTemplate(input, tapCount = 128) {
-  if (!input?.length) throw new TypeError('参考音频不能为空');
-  const stride = Math.max(1, Math.floor(input.length / tapCount));
-  const taps = [];
-  let mean = 0;
-  for (let i = 0; i < input.length; i += stride) {
-    const value = input[i];
-    if (!Number.isFinite(value)) throw new TypeError('参考音频包含无效样本');
-    taps.push({ offset: i, value }); mean += value;
-  }
-  mean /= taps.length;
-  let energy = 0;
-  for (const tap of taps) { tap.value -= mean; energy += tap.value * tap.value; }
-  return { taps, energy };
-}
-
-function scoreWindow(target, template, start) {
-  let mean = 0;
-  for (const tap of template.taps) mean += target[start + tap.offset];
-  mean /= template.taps.length;
-  let dot = 0, energy = 0;
-  for (const tap of template.taps) {
-    const x = target[start + tap.offset] - mean;
-    dot += x * tap.value; energy += x * x;
-  }
-  if (energy <= EPS || template.energy <= EPS) return 0;
-  return Math.max(-1, Math.min(1, dot / Math.sqrt(energy * template.energy)));
-}
-
-async function matchTemplate(reference, target, {
-  sampleRate = 11025, threshold = 0.75, maxMatches = 100,
-  minGapSeconds = 0.05, coarseStep = 8, signal = null,
-  onProgress = () => {}, yieldControl = () => new Promise(resolve => setTimeout(resolve, 0)),
-} = {}) {
-  if (!reference?.length || !target?.length) throw new TypeError('参考和目标音频都必须非空');
-  if (reference.length > target.length) return [];
-  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new RangeError('阈值须在 0 到 1 之间');
-  if (!Number.isInteger(maxMatches) || maxMatches < 1 || maxMatches > 1000) throw new RangeError('候选数量上限无效');
-  if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Number.isInteger(coarseStep) || coarseStep < 1) throw new RangeError('搜索参数无效');
-  for (const x of target) if (!Number.isFinite(x)) throw new TypeError('目标音频包含无效样本');
-  const template = prepareTemplate(reference);
-  if (template.energy <= EPS) return [];
-  const last = target.length - reference.length;
-  const step = Math.max(coarseStep, Math.ceil(reference.length / 160));
-  const total = Math.floor(last / step) + 1;
-  const candidates = [];
-  let best = { index: 0, score: -1 }, prev = null;
-  for (let k = 0, i = 0; i <= last; i += step, k++) {
-    if (signal?.aborted) throw new DOMException('扫描已取消', 'AbortError');
-    const score = Math.abs(scoreWindow(target, template, i));
-    if (score > best.score) best = { index: i, score };
-    if (!prev || score >= prev.score) prev = { index: i, score };
-    else if (prev.score >= threshold) { candidates.push(prev); prev = { index: i, score }; }
-    if (k % 128 === 0) {
-      onProgress(Math.min(0.9, k / Math.max(1, total) * 0.9));
-      await yieldControl();
-    }
-  }
-  if (prev?.score >= threshold) candidates.push(prev);
-  if (best.score >= threshold) candidates.push(best);
-  const refined = [];
-  const seen = new Set();
-  for (const candidate of candidates) {
-    const from = Math.max(0, candidate.index - step), to = Math.min(last, candidate.index + step);
-    let peak = { index: candidate.index, score: -1, signed: 0 };
-    for (let i = from; i <= to; i++) {
-      const signed = scoreWindow(target, template, i);
-      if (Math.abs(signed) > peak.score) peak = { index: i, score: Math.abs(signed), signed };
-    }
-    if (peak.score >= threshold && !seen.has(peak.index)) { refined.push(peak); seen.add(peak.index); }
-  }
-  refined.sort((a,b) => b.score-a.score);
-  const gap = Math.max(Math.round(minGapSeconds * sampleRate), reference.length, 1);
-  const selected = [];
-  for (const item of refined) {
-    if (selected.every(other => Math.abs(other.index - item.index) >= gap)) selected.push(item);
-    if (selected.length >= maxMatches) break;
-  }
-  selected.sort((a,b) => a.index-b.index); onProgress(1);
-  return selected.map((m,i) => ({ id:`match-${m.index}-${i}`, startSample:m.index, endSample:m.index+reference.length,
-    start:m.index/sampleRate, end:(m.index+reference.length)/sampleRate, score:m.score,
-    polarity:m.signed < 0 ? -1 : 1, accepted:true }));
-}
-
-
-/* --- src/preview.js --- */
-function createAudioFromBuffer(context, buffer) {
-  const result = context.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) result.copyToChannel(buffer.getChannelData(ch), ch);
-  return result;
-}
-
-function playBuffer(context, buffer, { start = 0, end = buffer.duration, gain = 1 } = {}) {
-  if (!(start >= 0 && end > start && end <= buffer.duration) || !Number.isFinite(gain) || gain < 0 || gain > 4) {
-    throw new RangeError('试听区间或音量无效');
-  }
-  const source = context.createBufferSource();
-  const volume = context.createGain();
-  source.buffer = buffer;
-  volume.gain.value = gain;
-  source.connect(volume); volume.connect(context.destination);
-  source.start(0, start, end - start);
-  return source;
-}
-
-function filterMatches(matches, threshold) {
-  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new RangeError('阈值须在 0 到 1 之间');
-  return matches.map(match => ({ ...match, visible: match.score >= threshold }));
-}
-
-
-/* --- src/editing.js --- */
-function normalizeClip(clip, sampleRate, channels) {
-  if (clip === 'silence') return Array.from({length:channels}, () => new Float32Array(0));
-  if (clip?.sampleRate !== sampleRate || !Array.isArray(clip.channels) || clip.channels.length < 1) throw new TypeError('插入音频采样率或声道数据无效');
-  const length = clip.channels[0].length;
-  if (!length || clip.channels.some(c => c.length !== length)) throw new TypeError('插入音频声道长度无效');
-  return Array.from({length:channels}, (_, ch) => clip.channels[Math.min(ch, clip.channels.length - 1)]);
-}
-
-function silenceClip(seconds, sampleRate, channels) {
-  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 600) throw new RangeError('静音时长须为 0 到 600 秒');
-  const length = Math.round(seconds * sampleRate);
-  return Array.from({length:channels}, () => new Float32Array(length));
-}
-
-function applyEdits(audio, edits) {
-  const { sampleRate, channels } = audio || {};
-  if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Array.isArray(channels) || !channels.length) throw new TypeError('原始音频数据无效');
-  const length = channels[0].length;
-  if (!length || channels.some(c => c.length !== length)) throw new TypeError('原始音频声道长度不一致');
-  if (!Array.isArray(edits)) throw new TypeError('编辑列表无效');
-  const ops = edits.map((edit, index) => {
-    const start = Math.round(edit.start * sampleRate), end = Math.round((edit.end ?? edit.start) * sampleRate);
-    if (!Number.isFinite(edit.start) || !Number.isFinite(edit.end ?? edit.start) || start < 0 || end < start || end > length) throw new RangeError('编辑区间超出原始音频范围');
-    let inserted;
-    if (edit.type === 'insert-silence') inserted = silenceClip(edit.duration, sampleRate, channels.length);
-    else if (['insert-audio','replace'].includes(edit.type)) inserted = normalizeClip(edit.clip, sampleRate, channels.length);
-    else if (edit.type !== 'delete') throw new TypeError(`不支持的编辑类型：${edit.type}`);
-    if (edit.type === 'replace' && end === start) throw new RangeError('替换区间不能为空');
-    return { ...edit, start, end, inserted, order: index };
-  }).sort((a,b) => a.start-b.start || a.order-b.order);
-
-  let consumedUntil = 0;
-  for (const op of ops) {
-    if (op.start < consumedUntil) throw new RangeError('替换/删除区间重叠，或插入点落在已编辑区间内');
-    if ((op.type === 'replace' || op.type === 'delete') && op.end > op.start) consumedUntil = op.end;
-  }
-  const output = Array.from({length:channels.length}, () => []);
-  const appendSource = (from,to) => { for(let ch=0;ch<channels.length;ch++) if(to>from) output[ch].push(channels[ch].subarray(from,to)); };
-  const appendClip = clip => { if(clip) for(let ch=0;ch<channels.length;ch++) if(clip[ch].length) output[ch].push(clip[ch]); };
-  let cursor=0;
-  let insertionPoint=-1;
-  for(const op of ops){
-    if(op.start>cursor) { appendSource(cursor,op.start); cursor=op.start; insertionPoint=-1; }
-    else if(op.start<cursor) throw new RangeError('编辑坐标发生重叠或逆序');
-    if(op.type==='insert-silence'||op.type==='insert-audio'){
-      if(insertionPoint!==op.start){appendSource(cursor,op.start);insertionPoint=op.start;}
-      appendClip(op.inserted);
-    }else if(op.type==='replace'){appendClip(op.inserted);cursor=op.end;insertionPoint=-1;}
-    else {cursor=op.end;insertionPoint=-1;}
-  }
-  appendSource(cursor,length);
-  const result=output.map(parts=>{ const total=parts.reduce((n,p)=>n+p.length,0); const data=new Float32Array(total); let at=0; for(const p of parts){data.set(p,at);at+=p.length} return data; });
-  if(result.some(c=>c.length!==result[0].length)) throw new Error('编辑后声道长度不一致');
-  return {sampleRate,channels:result,length:result[0].length,duration:result[0].length/sampleRate};
-}
-
-function edgeEdit(audio, { prependSeconds=0, appendSeconds=0, prependClip=null, appendClip=null }={}) {
-  const end=audio.channels[0].length/audio.sampleRate;
-  const edits=[];
-  if(prependSeconds) edits.push({type:'insert-silence',start:0,duration:prependSeconds});
-  if(prependClip) edits.push({type:'insert-audio',start:0,clip:prependClip});
-  if(appendClip) edits.push({type:'insert-audio',start:end,clip:appendClip});
-  if(appendSeconds) edits.push({type:'insert-silence',start:end,duration:appendSeconds});
-  return applyEdits(audio,edits);
-}
-
-
-/* --- src/history.js --- */
-class History {
-  constructor(initialValue, limit = 30) {
-    if (!Number.isInteger(limit) || limit < 1) throw new RangeError('历史上限无效');
-    this.limit=limit; this.items=[initialValue]; this.index=0;
-  }
-  get current(){return this.items[this.index]}
-  get canUndo(){return this.index>0}
-  get canRedo(){return this.index<this.items.length-1}
-  push(value){this.items=this.items.slice(0,this.index+1);this.items.push(value);if(this.items.length>this.limit+1)this.items.shift();this.index=this.items.length-1;return this.current}
-  undo(){if(this.canUndo)this.index--;return this.current}
-  redo(){if(this.canRedo)this.index++;return this.current}
-  reset(value){this.items=[value];this.index=0;return this.current}
-}
-
-
-/* --- src/export.js --- */
-function encodeWav(audio) {
-  const { sampleRate, channels } = audio;
-  if (!Number.isInteger(sampleRate) || sampleRate < 1000 || !Array.isArray(channels) || !channels.length) throw new TypeError('导出音频参数无效');
-  const length = channels[0].length;
-  if (!length || channels.some(c => c.length !== length)) throw new TypeError('导出声道长度无效');
-  const bytes = length * channels.length * 2;
-  if (!Number.isSafeInteger(bytes) || bytes > 0xffffffff - 36) throw new RangeError('WAV 超过 4 GB 上限');
-  const buffer = new ArrayBuffer(44 + bytes), view = new DataView(buffer);
-  const text = (offset, value) => { for(let i=0;i<value.length;i++) view.setUint8(offset+i,value.charCodeAt(i)); };
-  text(0,'RIFF'); view.setUint32(4,36+bytes,true); text(8,'WAVE'); text(12,'fmt ');
-  view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,channels.length,true);
-  view.setUint32(24,sampleRate,true); view.setUint32(28,sampleRate*channels.length*2,true);
-  view.setUint16(32,channels.length*2,true); view.setUint16(34,16,true); text(36,'data'); view.setUint32(40,bytes,true);
-  let offset=44;
-  for(let i=0;i<length;i++) for(let ch=0;ch<channels.length;ch++) {
-    const x=channels[ch][i]; if(!Number.isFinite(x)) throw new TypeError('音频包含无效采样');
-    const clamped=Math.max(-1,Math.min(1,x)); view.setInt16(offset,clamped<0?Math.round(clamped*32768):Math.round(clamped*32767),true); offset+=2;
-  }
-  return new Blob([buffer],{type:'audio/wav'});
-}
-
-function writeWavToDirectory(directory, name, blob) {
-  if (!directory?.getFileHandle || !/^[^\\/:*?"<>|]+\.wav$/i.test(name)) return Promise.reject(new TypeError('输出目录或文件名无效'));
-  return (async()=>{
-    const handle=await directory.getFileHandle(name,{create:true});
-    const stream=await handle.createWritable({keepExistingData:false});
-    try { await stream.write(blob); await stream.close(); }
-    catch(error) { try { await stream.abort(); } catch {} throw error; }
-  })();
-}
-
-function downloadBlob(blob, filename) {
-  const safe=String(filename||'audio.wav').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_');
-  const url=URL.createObjectURL(blob), link=document.createElement('a');
-  link.href=url; link.download=safe.endsWith('.wav')?safe:`${safe}.wav`; link.click();
-  setTimeout(()=>URL.revokeObjectURL(url),30000);
-}
-
-
-/* --- src/app.js --- */
+/* --- tools/audio-match-editor/src/app.js --- */
 
 
 
@@ -465,6 +138,334 @@ $('undo').onclick=()=>{const p=state.selected;if(p?.history.canUndo){p.history.u
 function commitView(msg){const p=state.selected;$('editStatus').textContent=msg;drawWave();buttonStatus();}
 $('chooseOutput').addEventListener('click',async()=>{if(!window.showDirectoryPicker){$('outputFolder').textContent='此浏览器不支持选择输出目录，将使用下载方式。';return;}try{state.outputDirectory=await window.showDirectoryPicker({mode:'readwrite'});$('outputFolder').textContent=`已选择输出文件夹：${state.outputDirectory.name}`;}catch(e){if(e.name!=='AbortError')error(`无法选择文件夹：${e.message}`);}});
 $('export').addEventListener('click',async()=>{try{const p=state.selected;if(!p)throw new Error('请先导入目标音频');const blob=encodeWav(currentAudio(p));const filename=`${p.file.name.replace(/\.[^.]+$/,'')}_edited.wav`;if(state.outputDirectory){await writeWavToDirectory(state.outputDirectory,filename,blob);$('editStatus').textContent=`已保存到 ${state.outputDirectory.name}/${filename}`;}else downloadBlob(blob,filename);}catch(e){error(e.message);}});
+
+
+/* --- tools/audio-match-editor/src/audio.js --- */
+
+const ANALYSIS_RATE = 11025;
+
+function toMonoAtRate(audioBuffer, targetRate = ANALYSIS_RATE) {
+  const { numberOfChannels, sampleRate, length } = audioBuffer;
+  if (!Number.isInteger(numberOfChannels) || numberOfChannels < 1 || !Number.isFinite(sampleRate) || sampleRate <= 0 || !Number.isInteger(length) || length < 1) {
+    throw new TypeError('音频缓冲区参数无效');
+  }
+  if (!Number.isFinite(targetRate) || targetRate <= 0) throw new RangeError('分析采样率无效');
+  const mono = new Float32Array(length);
+  for (let ch = 0; ch < numberOfChannels; ch++) {
+    const channel = audioBuffer.getChannelData(ch);
+    if (!channel || channel.length !== length) throw new TypeError('音频声道数据长度不一致');
+    for (let i = 0; i < length; i++) mono[i] += channel[i] / numberOfChannels;
+  }
+  if (sampleRate === targetRate) return { samples: mono, sampleRate: targetRate };
+  const outputLength = Math.max(1, Math.round(length * targetRate / sampleRate));
+  const result = new Float32Array(outputLength);
+  const ratio = sampleRate / targetRate;
+  // Box averaging acts as a lightweight anti-alias filter when downsampling.
+  for (let j = 0; j < outputLength; j++) {
+    const left = j * ratio, right = Math.min(length, (j + 1) * ratio);
+    const from = Math.floor(left), to = Math.max(from + 1, Math.ceil(right));
+    let sum = 0, count = 0;
+    for (let i = from; i < to && i < length; i++) { sum += mono[i]; count++; }
+    result[j] = count ? sum / count : mono[Math.min(from, length - 1)];
+  }
+  return { samples: result, sampleRate: targetRate };
+}
+
+async function decodeAudioFile(file, audioContext, { maxSeconds = PROJECT.limits.maxSeconds } = {}) {
+  if (!file || typeof file.arrayBuffer !== 'function' || !Number.isFinite(file.size) || file.size <= 0) {
+    throw new TypeError('请选择非空音频文件');
+  }
+  if (!audioContext || typeof audioContext.decodeAudioData !== 'function') throw new TypeError('浏览器音频解码器不可用');
+  let decoded;
+  try {
+    decoded = await audioContext.decodeAudioData(await file.arrayBuffer());
+  } catch {
+    throw new Error(`无法解码“${file.name || '音频'}”；请尝试 PCM WAV 或浏览器支持的音频格式`);
+  }
+  if (!decoded || decoded.length < 1 || decoded.duration > maxSeconds) {
+    throw new RangeError(`音频时长须大于 0 且不超过 ${maxSeconds} 秒`);
+  }
+  const analysis = toMonoAtRate(decoded);
+  return { file, buffer: decoded, samples: analysis.samples, sampleRate: analysis.sampleRate, duration: decoded.duration };
+}
+
+
+/* --- tools/audio-match-editor/src/editing.js --- */
+function normalizeClip(clip, sampleRate, channels) {
+  if (clip === 'silence') return Array.from({length:channels}, () => new Float32Array(0));
+  if (clip?.sampleRate !== sampleRate || !Array.isArray(clip.channels) || clip.channels.length < 1) throw new TypeError('插入音频采样率或声道数据无效');
+  const length = clip.channels[0].length;
+  if (!length || clip.channels.some(c => c.length !== length)) throw new TypeError('插入音频声道长度无效');
+  return Array.from({length:channels}, (_, ch) => clip.channels[Math.min(ch, clip.channels.length - 1)]);
+}
+
+function silenceClip(seconds, sampleRate, channels) {
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 600) throw new RangeError('静音时长须为 0 到 600 秒');
+  const length = Math.round(seconds * sampleRate);
+  return Array.from({length:channels}, () => new Float32Array(length));
+}
+
+function applyEdits(audio, edits) {
+  const { sampleRate, channels } = audio || {};
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Array.isArray(channels) || !channels.length) throw new TypeError('原始音频数据无效');
+  const length = channels[0].length;
+  if (!length || channels.some(c => c.length !== length)) throw new TypeError('原始音频声道长度不一致');
+  if (!Array.isArray(edits)) throw new TypeError('编辑列表无效');
+  const ops = edits.map((edit, index) => {
+    const start = Math.round(edit.start * sampleRate), end = Math.round((edit.end ?? edit.start) * sampleRate);
+    if (!Number.isFinite(edit.start) || !Number.isFinite(edit.end ?? edit.start) || start < 0 || end < start || end > length) throw new RangeError('编辑区间超出原始音频范围');
+    let inserted;
+    if (edit.type === 'insert-silence') inserted = silenceClip(edit.duration, sampleRate, channels.length);
+    else if (['insert-audio','replace'].includes(edit.type)) inserted = normalizeClip(edit.clip, sampleRate, channels.length);
+    else if (edit.type !== 'delete') throw new TypeError(`不支持的编辑类型：${edit.type}`);
+    if (edit.type === 'replace' && end === start) throw new RangeError('替换区间不能为空');
+    return { ...edit, start, end, inserted, order: index };
+  }).sort((a,b) => a.start-b.start || a.order-b.order);
+
+  let consumedUntil = 0;
+  for (const op of ops) {
+    if (op.start < consumedUntil) throw new RangeError('替换/删除区间重叠，或插入点落在已编辑区间内');
+    if ((op.type === 'replace' || op.type === 'delete') && op.end > op.start) consumedUntil = op.end;
+  }
+  const output = Array.from({length:channels.length}, () => []);
+  const appendSource = (from,to) => { for(let ch=0;ch<channels.length;ch++) if(to>from) output[ch].push(channels[ch].subarray(from,to)); };
+  const appendClip = clip => { if(clip) for(let ch=0;ch<channels.length;ch++) if(clip[ch].length) output[ch].push(clip[ch]); };
+  let cursor=0;
+  let insertionPoint=-1;
+  for(const op of ops){
+    if(op.start>cursor) { appendSource(cursor,op.start); cursor=op.start; insertionPoint=-1; }
+    else if(op.start<cursor) throw new RangeError('编辑坐标发生重叠或逆序');
+    if(op.type==='insert-silence'||op.type==='insert-audio'){
+      if(insertionPoint!==op.start){appendSource(cursor,op.start);insertionPoint=op.start;}
+      appendClip(op.inserted);
+    }else if(op.type==='replace'){appendClip(op.inserted);cursor=op.end;insertionPoint=-1;}
+    else {cursor=op.end;insertionPoint=-1;}
+  }
+  appendSource(cursor,length);
+  const result=output.map(parts=>{ const total=parts.reduce((n,p)=>n+p.length,0); const data=new Float32Array(total); let at=0; for(const p of parts){data.set(p,at);at+=p.length} return data; });
+  if(result.some(c=>c.length!==result[0].length)) throw new Error('编辑后声道长度不一致');
+  return {sampleRate,channels:result,length:result[0].length,duration:result[0].length/sampleRate};
+}
+
+function edgeEdit(audio, { prependSeconds=0, appendSeconds=0, prependClip=null, appendClip=null }={}) {
+  const end=audio.channels[0].length/audio.sampleRate;
+  const edits=[];
+  if(prependSeconds) edits.push({type:'insert-silence',start:0,duration:prependSeconds});
+  if(prependClip) edits.push({type:'insert-audio',start:0,clip:prependClip});
+  if(appendClip) edits.push({type:'insert-audio',start:end,clip:appendClip});
+  if(appendSeconds) edits.push({type:'insert-silence',start:end,duration:appendSeconds});
+  return applyEdits(audio,edits);
+}
+
+
+/* --- tools/audio-match-editor/src/export.js --- */
+function encodeWav(audio) {
+  const { sampleRate, channels } = audio;
+  if (!Number.isInteger(sampleRate) || sampleRate < 1000 || !Array.isArray(channels) || !channels.length) throw new TypeError('导出音频参数无效');
+  const length = channels[0].length;
+  if (!length || channels.some(c => c.length !== length)) throw new TypeError('导出声道长度无效');
+  const bytes = length * channels.length * 2;
+  if (!Number.isSafeInteger(bytes) || bytes > 0xffffffff - 36) throw new RangeError('WAV 超过 4 GB 上限');
+  const buffer = new ArrayBuffer(44 + bytes), view = new DataView(buffer);
+  const text = (offset, value) => { for(let i=0;i<value.length;i++) view.setUint8(offset+i,value.charCodeAt(i)); };
+  text(0,'RIFF'); view.setUint32(4,36+bytes,true); text(8,'WAVE'); text(12,'fmt ');
+  view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,channels.length,true);
+  view.setUint32(24,sampleRate,true); view.setUint32(28,sampleRate*channels.length*2,true);
+  view.setUint16(32,channels.length*2,true); view.setUint16(34,16,true); text(36,'data'); view.setUint32(40,bytes,true);
+  let offset=44;
+  for(let i=0;i<length;i++) for(let ch=0;ch<channels.length;ch++) {
+    const x=channels[ch][i]; if(!Number.isFinite(x)) throw new TypeError('音频包含无效采样');
+    const clamped=Math.max(-1,Math.min(1,x)); view.setInt16(offset,clamped<0?Math.round(clamped*32768):Math.round(clamped*32767),true); offset+=2;
+  }
+  return new Blob([buffer],{type:'audio/wav'});
+}
+
+function writeWavToDirectory(directory, name, blob) {
+  if (!directory?.getFileHandle || !/^[^\\/:*?"<>|]+\.wav$/i.test(name)) return Promise.reject(new TypeError('输出目录或文件名无效'));
+  return (async()=>{
+    const handle=await directory.getFileHandle(name,{create:true});
+    const stream=await handle.createWritable({keepExistingData:false});
+    try { await stream.write(blob); await stream.close(); }
+    catch(error) { try { await stream.abort(); } catch {} throw error; }
+  })();
+}
+
+function downloadBlob(blob, filename) {
+  const safe=String(filename||'audio.wav').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_');
+  const url=URL.createObjectURL(blob), link=document.createElement('a');
+  link.href=url; link.download=safe.endsWith('.wav')?safe:`${safe}.wav`; link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+
+/* --- tools/audio-match-editor/src/history.js --- */
+class History {
+  constructor(initialValue, limit = 30) {
+    if (!Number.isInteger(limit) || limit < 1) throw new RangeError('历史上限无效');
+    this.limit=limit; this.items=[initialValue]; this.index=0;
+  }
+  get current(){return this.items[this.index]}
+  get canUndo(){return this.index>0}
+  get canRedo(){return this.index<this.items.length-1}
+  push(value){this.items=this.items.slice(0,this.index+1);this.items.push(value);if(this.items.length>this.limit+1)this.items.shift();this.index=this.items.length-1;return this.current}
+  undo(){if(this.canUndo)this.index--;return this.current}
+  redo(){if(this.canRedo)this.index++;return this.current}
+  reset(value){this.items=[value];this.index=0;return this.current}
+}
+
+
+/* --- tools/audio-match-editor/src/matcher.js --- */
+const EPS = 1e-12;
+
+function prepareTemplate(input, tapCount = 128) {
+  if (!input?.length) throw new TypeError('参考音频不能为空');
+  const stride = Math.max(1, Math.floor(input.length / tapCount));
+  const taps = [];
+  let mean = 0;
+  for (let i = 0; i < input.length; i += stride) {
+    const value = input[i];
+    if (!Number.isFinite(value)) throw new TypeError('参考音频包含无效样本');
+    taps.push({ offset: i, value }); mean += value;
+  }
+  mean /= taps.length;
+  let energy = 0;
+  for (const tap of taps) { tap.value -= mean; energy += tap.value * tap.value; }
+  return { taps, energy };
+}
+
+function scoreWindow(target, template, start) {
+  let mean = 0;
+  for (const tap of template.taps) mean += target[start + tap.offset];
+  mean /= template.taps.length;
+  let dot = 0, energy = 0;
+  for (const tap of template.taps) {
+    const x = target[start + tap.offset] - mean;
+    dot += x * tap.value; energy += x * x;
+  }
+  if (energy <= EPS || template.energy <= EPS) return 0;
+  return Math.max(-1, Math.min(1, dot / Math.sqrt(energy * template.energy)));
+}
+
+async function matchTemplate(reference, target, {
+  sampleRate = 11025, threshold = 0.75, maxMatches = 100,
+  minGapSeconds = 0.05, coarseStep = 8, signal = null,
+  onProgress = () => {}, yieldControl = () => new Promise(resolve => setTimeout(resolve, 0)),
+} = {}) {
+  if (!reference?.length || !target?.length) throw new TypeError('参考和目标音频都必须非空');
+  if (reference.length > target.length) return [];
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new RangeError('阈值须在 0 到 1 之间');
+  if (!Number.isInteger(maxMatches) || maxMatches < 1 || maxMatches > 1000) throw new RangeError('候选数量上限无效');
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Number.isInteger(coarseStep) || coarseStep < 1) throw new RangeError('搜索参数无效');
+  for (const x of target) if (!Number.isFinite(x)) throw new TypeError('目标音频包含无效样本');
+  const template = prepareTemplate(reference);
+  if (template.energy <= EPS) return [];
+  const last = target.length - reference.length;
+  const step = Math.max(coarseStep, Math.ceil(reference.length / 160));
+  const total = Math.floor(last / step) + 1;
+  const candidates = [];
+  let best = { index: 0, score: -1 }, prev = null;
+  for (let k = 0, i = 0; i <= last; i += step, k++) {
+    if (signal?.aborted) throw new DOMException('扫描已取消', 'AbortError');
+    const score = Math.abs(scoreWindow(target, template, i));
+    if (score > best.score) best = { index: i, score };
+    if (!prev || score >= prev.score) prev = { index: i, score };
+    else if (prev.score >= threshold) { candidates.push(prev); prev = { index: i, score }; }
+    if (k % 128 === 0) {
+      onProgress(Math.min(0.9, k / Math.max(1, total) * 0.9));
+      await yieldControl();
+    }
+  }
+  if (prev?.score >= threshold) candidates.push(prev);
+  if (best.score >= threshold) candidates.push(best);
+  const refined = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const from = Math.max(0, candidate.index - step), to = Math.min(last, candidate.index + step);
+    let peak = { index: candidate.index, score: -1, signed: 0 };
+    for (let i = from; i <= to; i++) {
+      const signed = scoreWindow(target, template, i);
+      if (Math.abs(signed) > peak.score) peak = { index: i, score: Math.abs(signed), signed };
+    }
+    if (peak.score >= threshold && !seen.has(peak.index)) { refined.push(peak); seen.add(peak.index); }
+  }
+  refined.sort((a,b) => b.score-a.score);
+  const gap = Math.max(Math.round(minGapSeconds * sampleRate), reference.length, 1);
+  const selected = [];
+  for (const item of refined) {
+    if (selected.every(other => Math.abs(other.index - item.index) >= gap)) selected.push(item);
+    if (selected.length >= maxMatches) break;
+  }
+  selected.sort((a,b) => a.index-b.index); onProgress(1);
+  return selected.map((m,i) => ({ id:`match-${m.index}-${i}`, startSample:m.index, endSample:m.index+reference.length,
+    start:m.index/sampleRate, end:(m.index+reference.length)/sampleRate, score:m.score,
+    polarity:m.signed < 0 ? -1 : 1, accepted:true }));
+}
+
+
+/* --- tools/audio-match-editor/src/preview.js --- */
+function createAudioFromBuffer(context, buffer) {
+  const result = context.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) result.copyToChannel(buffer.getChannelData(ch), ch);
+  return result;
+}
+
+function playBuffer(context, buffer, { start = 0, end = buffer.duration, gain = 1 } = {}) {
+  if (!(start >= 0 && end > start && end <= buffer.duration) || !Number.isFinite(gain) || gain < 0 || gain > 4) {
+    throw new RangeError('试听区间或音量无效');
+  }
+  const source = context.createBufferSource();
+  const volume = context.createGain();
+  source.buffer = buffer;
+  volume.gain.value = gain;
+  source.connect(volume); volume.connect(context.destination);
+  source.start(0, start, end - start);
+  return source;
+}
+
+function filterMatches(matches, threshold) {
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new RangeError('阈值须在 0 到 1 之间');
+  return matches.map(match => ({ ...match, visible: match.score >= threshold }));
+}
+
+
+/* --- tools/audio-match-editor/src/state.js --- */
+const PROJECT = Object.freeze({
+  title: '音频匹配与编辑器',
+  version: '1.0.0',
+  limits: Object.freeze({ maxSeconds: 600, maxTemplateSeconds: 30, maxExportBytes: 0xffffffff - 36 }),
+});
+
+let projectSequence = 0;
+
+function createId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  projectSequence += 1;
+  return `project-${Date.now().toString(36)}-${projectSequence.toString(36)}`;
+}
+
+function createProject(file) {
+  return {
+    id: createId(),
+    file,
+    sourceBuffer: null,
+    currentBuffer: null,
+    analysisSamples: null,
+    templateSamples: null,
+    matches: [],
+    edits: [],
+    history: [],
+    historyIndex: 0,
+    status: 'idle',
+    error: null,
+  };
+}
+
+function validateDuration(seconds, name = '时长') {
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > PROJECT.limits.maxSeconds) {
+    throw new RangeError(`${name}必须在 0 到 ${PROJECT.limits.maxSeconds} 秒之间`);
+  }
+  return seconds;
+}
 
 
 </script>

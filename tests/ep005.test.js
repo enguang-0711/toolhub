@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { applyEdits, edgeEdit } from '../src/editing.js';
+import { applyEdits, edgeEdit } from '../tools/audio-match-editor/src/editing.js';
 const base={sampleRate:10,channels:[Float32Array.from([1,2,3,4,5,6])],length:6,duration:.6};
 const audio=[0.8,0.9];
 const inserted=applyEdits(base,[{type:'insert-audio',start:.2,clip:{sampleRate:10,channels:[Float32Array.from(audio)]}},{type:'replace',start:.4,end:.6,clip:{sampleRate:10,channels:[Float32Array.from([7])]}}]);

@@ -1,13 +1,17 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f4f6fa" />
-    <title>Toolhub 管理台</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/dashboard/main.js"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="zh-CN" id="htmlRoot" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="naive-ui-style">
+  <link rel="icon" href="/favicon.ico">
+  <title>Toolhub 管理台</title>
+</head>
+<body>
+  <div id="appProvider" style="display:none"></div>
+  <div id="app">
+    <div class="first-loading-wrap"><div class="loading-wrap"><span class="dot"><i></i><i></i><i></i><i></i></span></div><h2>Toolhub 管理台</h2></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
 </html>

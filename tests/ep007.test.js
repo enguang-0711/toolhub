@@ -1,7 +1,7 @@
-import { encodeWav } from '../src/export.js';
-import { History } from '../src/history.js';
-import { applyEdits, edgeEdit } from '../src/editing.js';
-import { matchTemplate } from '../src/matcher.js';
+import { encodeWav } from '../tools/audio-match-editor/src/export.js';
+import { History } from '../tools/audio-match-editor/src/history.js';
+import { applyEdits, edgeEdit } from '../tools/audio-match-editor/src/editing.js';
+import { matchTemplate } from '../tools/audio-match-editor/src/matcher.js';
 import assert from 'node:assert/strict';
 
 // Export format/header, multi-channel sample order, clamping and invalid channels.
