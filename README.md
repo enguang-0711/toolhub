@@ -1,94 +1,23 @@
-# Toolhub — 实用工具卡片集合
+# Toolhub 管理台
 
-本仓库是可扩展的在线工具箱；线上入口为 <https://enguang-0711.github.io/toolhub/>。首页以独立卡片列出每个工具，点击卡片进入工具页面。当前包括“音频匹配与编辑”，全部音频处理在本地浏览器中完成。
+这是一个可扩展的 Vue 3 + Naive UI 多工具箱。管理台提供总览、可搜索/筛选的工具目录和独立的工具入口卡片。新增工具时将页面加入 `vite.config.js` 的多页面入口，并在 `src/dashboard/App.vue` 的 `tools` 清单登记工具名称、简介、分类、图标和子页面链接。
 
-## 添加新工具
+## 开发
 
-1. 在 `tools/<tool-id>/` 下添加独立的 `index.html`。
-2. 在根目录 `index.html` 的“工具卡片列表”中添加一个 `<article class="card">`，链接指向 `tools/<tool-id>/`。
-3. 将新工具页面加入 `.github/workflows/pages.yml` 的构建步骤，复制到 `dist/tools/<tool-id>/index.html`。未来可以把这份映射升级为自动遍历工具目录。
-4. 提交并推送至 `main`；GitHub Actions 将自动测试并部署整个卡片首页和工具目录。
-
-## 音频匹配与编辑
-
-应用目录：[`tools/audio-match-editor/`](tools/audio-match-editor/)。可以导入参考声音和多个目标音频，扫描并显示波形匹配分数与位置，试听、接受或排除候选，然后插入静音/音频、替换、删除，做全局首尾补音，撤销/重做及导出 WAV。音频不会上传。
-
-双击打开需进入音频应用目录，并运行 `npm run build`（Node.js 18+）以生成内联脚本的独立 HTML；本地开发则在该目录运行 `npm run serve` 后访问 `http://localhost:8000`。
-
-测试命令：在音频应用目录执行 `npm test`。CI workflow 也会在每次 `main` 提交上运行测试和构建。
-
-## 支持与限制
-
-- 模板匹配是近似波形相关扫描，适合重复或近似录制的短片段；显著噪声、混响、语速/速度变化可能导致误报或漏报，请结合试听。分数是相关度，不是统计概率。
-- 分析使用单声道、约 11.025 kHz；编辑音频需与目标采样率相同；导出 PCM16 WAV，传统 RIFF 文件上限约 4 GB。
-- 输入格式取决于浏览器解码支持；参考模板限 30 秒、单个目标限 10 分钟。
-- 应用不上传音频；刷新网页后内存项目会丢失。
-
-## 在线 Pages
-
-GitHub Pages 部署后访问：<https://enguang-0711.github.io/toolhub/>。工作流在每次推送到 `main` 后自动运行测试、打包和发布；也可以在 GitHub Actions 页面手动触发。初次启用请在仓库 Settings → Pages → Build and deployment 中选择 **GitHub Actions**。
-
-## 快速启动
-
-### 双击直接打开
-
-1. 在本目录运行 `npm run build`（需要 Node.js 18+）。该命令会把 app 模块打包内联进 `index.html`，从而允许 `file://` 本地打开，不依赖浏览器加载跨域模块。
-2. 双击 `index.html`，或拖入 Chrome/Edge。
-
-### 静态服务器
-
-也可以无需构建，在本目录运行 `npm run serve`（需 Python 3），然后访问 `http://localhost:8000`。ES module 直接从 `src/` 加载。
-
-导入文件时点击“选择参考片段”、“添加音频文件”或“添加文件夹”；点击无响应时确认不是仍在旧版页面，关闭再重新打开刚构建的 `index.html`。
-
-
-## 支持与限制
-
-- 全部音频仅驻留浏览器内存，不上传。刷新页面会丢失当前项目。
-- 模板匹配是低成本的近似波形相关扫描，适合重复/近似录制的声效与短片段。若声音有显著混响、语速/速度变化或噪音，分数可能低或误报；请人工试听。
-- 分析使用单声道、约 11.025 kHz；导入后的原始解码音频用于编辑。导出固定 PCM16 WAV，传统 RIFF 文件不超过约 4GB。
-- 输入格式取决于浏览器支持；复杂编码或损坏文件会显示错误。插入替换音频要求与目标采样率相同。
-- Chrome/Edge 等支持 File System Access API 的浏览器可在“选择输出文件夹”后授权直写；否则导出触发浏览器下载。浏览器要求安全上下文时，请从 localhost 运行。
-- 扫描参考限制 30 秒，目标限制 10 分钟；超长录音请预先裁剪。
-
-## 项目结构
-
-```text
-audio-match-editor/
-├── index.html                 # 界面
-├── build-standalone.js        # 内联模块生成 file:// 可直接打开的单文件应用
-├── package.json               # build / test / serve 脚本（无依赖）
-├── REQUIREMENTS_AND_PLAN.md   # 完整需求、EP 可行性和开发排序
-├── REVIEW_LOG.md              # 逐 EP 评审、修复与变更记录
-├── src/
-│   ├── app.js                 # 应用控制器和 UI 事件
-│   ├── audio.js               # 解码、单声道和分析重采样
-│   ├── matcher.js              # 近似模板匹配与实时进度
-│   ├── preview.js              # 候选试听和筛选
-│   ├── editing.js              # 片段编辑/拼接
-│   ├── history.js              # 撤销/重做
-│   ├── export.js               # PCM16 WAV 和保存
-│   └── state.js                # 状态与输入限制
-└── tests/                      # 各 EP 独立 Node 测试
+```bash
+npm ci
+npm run dev
 ```
 
-## 测试
+## 测试与构建
 
-`npm test`（需要 Node.js 18+）。测试只用 Node 内置 assert，不需 npm install，覆盖各 EP 的算法、编辑重叠和同点插入、历史、PCM16 WAV、路径安全及异常写入。
+```bash
+npm test
+npm run build
+```
 
-真实 Headless Chrome 已加载应用首页并确认无模块启动异常；尚未用自动化模拟真实文件选择和目录授权，因此实际导入/授权流程请在浏览器手动操作验证。
+Vite 将管理台和工具页面构建到 `dist/`。`GITHUB_ACTIONS` 环境开启时自动使用 Pages 仓库子路径 `/toolhub/`。GitHub Actions 在每次推送 `main` 后执行安装、测试、构建并部署 Pages。
 
-## 项目复盘
+## 现有工具
 
-已实现 EP-001..EP-007：状态与需求基线、解码/分析重采样、相关匹配、候选筛选/试听、时间线操作、局部/首尾编辑、撤销/重做及 WAV 导出。所有修改在浏览器本地；目标数据不上传。
-
-### 已知待办
-
-- 当前界面创建了每个目标文件独立编辑状态，但操作面板一次作用于当前选中的目标；批量扫描支持多文件，批量统一编辑可后续增强。
-- 撤销历史只保存有界编辑操作日志（最多 30 步），每次预览/导出时从不可变原音频重放操作，避免缓存几十份整曲 PCM；单次渲染仍需要额外内存。
-- 波形当前为全曲概览，支持点击时间位置试听附近声音，但尚无拖拽裁切、细粒度缩放和淡入淡出。
-- 模板匹配为抽样近似 NCC；生产级鲁棒识别可考虑频谱特征/MFCC、FFT 相关或 ONNX 音频嵌入模型。
-
-## 许可证与隐私
-
-当前交付为本地工具原型，不含外部依赖或遥测；请仅导入你有权处理的音频。
+- **音频匹配与编辑**：位于 [`tools/audio-match-editor/`](tools/audio-match-editor/)，离线导入本地音频、匹配片段、编辑并导出 WAV。

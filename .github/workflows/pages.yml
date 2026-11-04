@@ -23,15 +23,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - name: Build standalone site
+          node-version: 18
+      - name: Build and test
         run: |
-          npm test
+          npm ci
           npm run build
-          mkdir -p dist/tools/audio-match-editor
-          cp index.html dist/index.html
-          cp tools/audio-match-editor/index.html dist/tools/audio-match-editor/index.html
-          touch dist/.nojekyll
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

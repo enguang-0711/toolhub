@@ -1,8 +1,22 @@
 {
-  "name": "audio-match-editor",
+  "name": "toolhub",
   "version": "1.0.0",
   "private": true,
-  "description": "Local browser app for audio-template matching and clip editing",
-  "scripts": {"build": "node build-standalone.js", "test": "node tests/run.js", "serve": "python3 -m http.server 8000"},
-  "type": "module"
+  "description": "Toolhub administration dashboard and local tools",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "npm run test && npm run build:audio && vite build",
+    "build:audio": "node build-standalone.js",
+    "test": "node tests/run.js",
+    "serve": "python3 -m http.server 8000"
+  },
+  "dependencies": {
+    "naive-ui": "2.41.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^6.0.7"
+  }
 }

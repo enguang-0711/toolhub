@@ -1,20 +1,13 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#111724">
-<title>工具箱 · Toolhub</title>
-<style>
-:root{color-scheme:dark;--bg:#0c111b;--panel:#151e2c;--line:#29374b;--text:#edf3fb;--muted:#98a8bd;--blue:#7daeff;--green:#70dfbe}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 75% -15%,#1b4262 0,transparent 42%),var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{width:min(1120px,calc(100% - 40px));margin:auto;padding:64px 0}.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#86a6cb}.title{font-size:clamp(36px,7vw,62px);letter-spacing:-.045em;line-height:1.1;margin:8px 0 13px}.intro{max-width:650px;color:var(--muted);margin:0}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:42px 0 15px}.toolbar h2{margin:0;font-size:17px}.count{color:var(--muted);font-size:13px}.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:16px}.card{position:relative;display:flex;min-height:240px;flex-direction:column;padding:22px;background:linear-gradient(160deg,#182334,#121a27);border:1px solid var(--line);border-radius:19px;box-shadow:0 15px 45px #0002;transition:transform .16s,border-color .16s}.card:hover{transform:translateY(-3px);border-color:#5277a9}.icon{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#20354b;font-size:23px}.card h3{font-size:19px;margin:20px 0 4px}.card p{margin:0;color:var(--muted);font-size:13px}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:16px}.tag{color:#aec0d6;background:#212c3b;border-radius:99px;padding:3px 9px;font-size:11px}.go{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:20px;color:var(--blue);font-size:13px;font-weight:650}.go span:last-child{font-size:18px}.card a{position:absolute;inset:0;border-radius:inherit}.card a:focus-visible{outline:3px solid var(--green);outline-offset:4px}.footer{margin-top:52px;padding-top:19px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}.footer a{color:#9ebff0}@media(max-width:500px){.wrap{width:calc(100% - 28px);padding:38px 0}.toolbar{margin-top:31px}.cards{grid-template-columns:1fr}.card{min-height:220px}}
-</style>
-</head>
-<body><main class="wrap">
-<header><div class="eyebrow">ENGUANG · TOOLHUB</div><h1 class="title">工具箱</h1><p class="intro">轻量、实用、打开即用的小工具集合。选择一张卡片开始使用；后续添加工具时，在工具目录放入独立页面并登记到卡片清单即可。</p></header>
-<div class="toolbar"><h2>所有工具</h2><span class="count">目前 1 个工具</span></div>
-<section class="cards" aria-label="工具卡片列表">
-<article class="card"><div class="icon" aria-hidden="true">∿</div><h3>音频匹配与编辑</h3><p>按参考声音搜索音频片段，试听确认后插入、替换或删除，并导出 WAV。所有音频只在本地浏览器处理。</p><div class="tags"><span class="tag">音频</span><span class="tag">本地处理</span><span class="tag">WAV</span></div><div class="go"><span>打开工具</span><span aria-hidden="true">↗</span></div><a href="tools/audio-match-editor/" aria-label="打开音频匹配与编辑"></a></article>
-</section>
-<footer class="footer">更多卡片将持续添加。<a href="https://github.com/enguang-0711/toolhub">查看项目源码</a></footer>
-</main></body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f6fa" />
+    <title>Toolhub 管理台</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/dashboard/main.js"></script>
+  </body>
 </html>
