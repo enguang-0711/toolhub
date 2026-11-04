@@ -3,7 +3,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
-const sourcePath = resolve(root, 'index.html');
+const sourcePath = resolve(root, 'tools/audio-match-editor/index.html');
 const sourceHtml = await readFile(sourcePath, 'utf8');
 const modules = ['src/state.js', 'src/audio.js', 'src/matcher.js', 'src/preview.js', 'src/editing.js', 'src/history.js', 'src/export.js', 'src/app.js'];
 let bundle = '';

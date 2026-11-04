@@ -28,8 +28,9 @@ jobs:
         run: |
           npm test
           npm run build
-          mkdir dist
+          mkdir -p dist/tools/audio-match-editor
           cp index.html dist/index.html
+          cp tools/audio-match-editor/index.html dist/tools/audio-match-editor/index.html
           touch dist/.nojekyll
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
